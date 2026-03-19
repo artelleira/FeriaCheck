@@ -1,7 +1,7 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { database } from '../firebaseConfig';
-import { ref, set, get, remove, onValue } from 'firebase/database';
+import { ref, set, get, onValue } from 'firebase/database';
 
 export default function FeriaCheck() {
   const [view, setView] = useState('client');
@@ -34,6 +34,12 @@ export default function FeriaCheck() {
   const [adminEditForm, setAdminEditForm] = useState(null);
   const [adminPhotoPreview, setAdminPhotoPreview] = useState('');
   const [loading, setLoading] = useState(true);
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const [adminLocationSuggestions, setAdminLocationSuggestions] = useState([]);
+  const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
+  const [showAdminLocationSuggestions, setShowAdminLocationSuggestions] = useState(false);
+  const autocompleteRef = useRef(null);
+  const adminAutocompleteRef = useRef(null);
 
   const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
@@ -61,6 +67,62 @@ export default function FeriaCheck() {
 
     return () => unsubscribeVendors();
   }, []);
+
+  // Google Places Autocomplete para ubicación en edición de vendedor
+  const handleLocationChange = (e) => {
+    const value = e.target.value;
+    setEditForm({ ...editForm, location: value });
+
+    if (value.length > 2 && window.google) {
+      const service = new window.google.maps.places.AutocompleteService();
+      service.getPlacePredictions(
+        { input: value, componentRestrictions: { country: 'ar' } },
+        (predictions, status) => {
+          if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+            setLocationSuggestions(predictions);
+            setShowLocationSuggestions(true);
+          }
+        }
+      );
+    } else {
+      setLocationSuggestions([]);
+      setShowLocationSuggestions(false);
+    }
+  };
+
+  // Google Places Autocomplete para admin
+  const handleAdminLocationChange = (e) => {
+    const value = e.target.value;
+    setAdminEditForm({ ...adminEditForm, location: value });
+
+    if (value.length > 2 && window.google) {
+      const service = new window.google.maps.places.AutocompleteService();
+      service.getPlacePredictions(
+        { input: value, componentRestrictions: { country: 'ar' } },
+        (predictions, status) => {
+          if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
+            setAdminLocationSuggestions(predictions);
+            setShowAdminLocationSuggestions(true);
+          }
+        }
+      );
+    } else {
+      setAdminLocationSuggestions([]);
+      setShowAdminLocationSuggestions(false);
+    }
+  };
+
+  const selectLocationSuggestion = (suggestion) => {
+    setEditForm({ ...editForm, location: suggestion.description });
+    setLocationSuggestions([]);
+    setShowLocationSuggestions(false);
+  };
+
+  const selectAdminLocationSuggestion = (suggestion) => {
+    setAdminEditForm({ ...adminEditForm, location: suggestion.description });
+    setAdminLocationSuggestions([]);
+    setShowAdminLocationSuggestions(false);
+  };
 
   const saveVendorsToFirebase = (updatedVendors) => {
     set(ref(database, 'vendors'), updatedVendors);
@@ -130,9 +192,9 @@ export default function FeriaCheck() {
       description: '',
       what_sell: '',
       location: '',
-      scheduleDay: 'Lunes',
-      scheduleStartTime: '09:00',
-      scheduleEndTime: '18:00',
+      workDays: ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'],
+      startTime: '09:00',
+      endTime: '18:00',
       isPresent: false,
       whatsapp: '',
       instagram: '',
@@ -176,10 +238,32 @@ export default function FeriaCheck() {
     }
   };
 
+  const toggleDay = (day) => {
+    const workDays = editForm.workDays || [];
+    if (workDays.includes(day)) {
+      setEditForm({ ...editForm, workDays: workDays.filter(d => d !== day) });
+    } else {
+      setEditForm({ ...editForm, workDays: [...workDays, day] });
+    }
+  };
+
+  const toggleAdminDay = (day) => {
+    const workDays = adminEditForm.workDays || [];
+    if (workDays.includes(day)) {
+      setAdminEditForm({ ...adminEditForm, workDays: workDays.filter(d => d !== day) });
+    } else {
+      setAdminEditForm({ ...adminEditForm, workDays: [...workDays, day] });
+    }
+  };
+
   const handleSaveProfile = () => {
     setEditError('');
     if (!editForm.name.trim()) {
       setEditError('El nombre es obligatorio');
+      return;
+    }
+    if (!editForm.workDays || editForm.workDays.length === 0) {
+      setEditError('Selecciona al menos un día de trabajo');
       return;
     }
     const updatedVendor = { ...editForm, photo: photoPreview };
@@ -271,6 +355,10 @@ export default function FeriaCheck() {
       alert('El nombre es obligatorio');
       return;
     }
+    if (!adminEditForm.workDays || adminEditForm.workDays.length === 0) {
+      alert('Selecciona al menos un día de trabajo');
+      return;
+    }
     const updatedVendor = { ...adminEditForm, photo: adminPhotoPreview };
     const updatedVendors = vendors.map(v => (v.id === adminEditingVendor.id ? updatedVendor : v));
     setVendors(updatedVendors);
@@ -308,7 +396,8 @@ export default function FeriaCheck() {
   };
 
   const getScheduleDisplay = (vendor) => {
-    return `${vendor.scheduleDay} ${vendor.scheduleStartTime || '09:00'} - ${vendor.scheduleEndTime || '18:00'}`;
+    const workDays = vendor.workDays || [];
+    return `${workDays.join(', ')} de ${vendor.startTime || '09:00'} a ${vendor.endTime || '18:00'}`;
   };
 
   const sortedVendors = [...vendors].sort((a, b) => {
@@ -353,7 +442,7 @@ export default function FeriaCheck() {
                       {vendor.what_sell && <p className="text-sm font-semibold text-slate-700 mb-2">📦 {vendor.what_sell}</p>}
                       {vendor.description && <p className="text-sm text-slate-600 mb-3 line-clamp-2">{vendor.description}</p>}
                       {vendor.location && <p className="text-xs text-slate-600 mb-1 cursor-pointer hover:text-blue-600 font-semibold">📍 {vendor.location}</p>}
-                      {vendor.scheduleDay && <p className="text-xs text-slate-600 mb-3">⏰ {getScheduleDisplay(vendor)}</p>}
+                      {vendor.workDays && <p className="text-xs text-slate-600 mb-3">⏰ {getScheduleDisplay(vendor)}</p>}
                       <p className="text-xs text-slate-500 mb-4">{vendor.isPresent ? '✅ Presente hoy' : '❌ No disponible'}</p>
                       <div className="flex gap-2 flex-col">
                         <div className="flex gap-2">
@@ -447,22 +536,55 @@ export default function FeriaCheck() {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-2">Ubicación (dirección)</label>
-                    <input type="text" placeholder="Ej: Pasillo 2, Local 5, Centro Comercial" value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500" />
+                    <div className="relative">
+                      <input 
+                        ref={autocompleteRef}
+                        type="text" 
+                        placeholder="Ej: Paris 1464, Buenos Aires" 
+                        value={editForm.location} 
+                        onChange={handleLocationChange}
+                        onFocus={() => setShowLocationSuggestions(true)}
+                        className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500" 
+                      />
+                      {showLocationSuggestions && locationSuggestions.length > 0 && (
+                        <div className="absolute top-full left-0 right-0 bg-white border-2 border-slate-300 rounded-lg mt-1 z-50 max-h-48 overflow-y-auto">
+                          {locationSuggestions.map((suggestion) => (
+                            <button
+                              key={suggestion.place_id}
+                              onClick={() => selectLocationSuggestion(suggestion)}
+                              className="w-full text-left px-4 py-2 hover:bg-slate-100 border-b last:border-b-0 text-sm"
+                            >
+                              {suggestion.description}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-3">Días de trabajo *</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {days.map(day => (
+                        <label key={day} className="flex items-center gap-2 cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            checked={(editForm.workDays || []).includes(day)}
+                            onChange={() => toggleDay(day)}
+                            className="w-5 h-5 rounded border-slate-300"
+                          />
+                          <span className="text-sm text-slate-700">{day}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Día</label>
-                      <select value={editForm.scheduleDay || 'Lunes'} onChange={(e) => setEditForm({ ...editForm, scheduleDay: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500">
-                        {days.map(day => <option key={day} value={day}>{day}</option>)}
-                      </select>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Hora inicio</label>
+                      <input type="time" value={editForm.startTime || '09:00'} onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Desde</label>
-                      <input type="time" value={editForm.scheduleStartTime || '09:00'} onChange={(e) => setEditForm({ ...editForm, scheduleStartTime: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Hasta</label>
-                      <input type="time" value={editForm.scheduleEndTime || '18:00'} onChange={(e) => setEditForm({ ...editForm, scheduleEndTime: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500" />
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Hora fin</label>
+                      <input type="time" value={editForm.endTime || '18:00'} onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500" />
                     </div>
                   </div>
                   <div>
@@ -490,7 +612,7 @@ export default function FeriaCheck() {
                     <h3 className="text-2xl font-bold text-slate-900">{currentVendor.name}</h3>
                     {currentVendor.what_sell && <p className="text-slate-600 mt-2">📦 {currentVendor.what_sell}</p>}
                     {currentVendor.location && <p className="text-slate-600">📍 {currentVendor.location}</p>}
-                    {currentVendor.scheduleDay && <p className="text-slate-600">⏰ {getScheduleDisplay(currentVendor)}</p>}
+                    {currentVendor.workDays && <p className="text-slate-600">⏰ {getScheduleDisplay(currentVendor)}</p>}
                   </div>
                 </div>
                 {currentVendor.description && <p className="text-slate-600 mb-6 p-4 bg-slate-50 rounded-lg">{currentVendor.description}</p>}
@@ -576,21 +698,53 @@ export default function FeriaCheck() {
                         <input type="text" value={adminEditForm.name} onChange={(e) => setAdminEditForm({ ...adminEditForm, name: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3" placeholder="Nombre" />
                         <input type="text" value={adminEditForm.what_sell} onChange={(e) => setAdminEditForm({ ...adminEditForm, what_sell: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3" placeholder="¿Qué venden?" />
                         <textarea value={adminEditForm.description} onChange={(e) => setAdminEditForm({ ...adminEditForm, description: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 h-20" placeholder="Descripción" />
-                        <input type="text" value={adminEditForm.location} onChange={(e) => setAdminEditForm({ ...adminEditForm, location: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3" placeholder="Ubicación (dirección)" />
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="relative">
+                          <input 
+                            type="text" 
+                            value={adminEditForm.location} 
+                            onChange={handleAdminLocationChange}
+                            onFocus={() => setShowAdminLocationSuggestions(true)}
+                            className="w-full border-2 border-slate-300 rounded-lg p-3" 
+                            placeholder="Ubicación (dirección)" 
+                          />
+                          {showAdminLocationSuggestions && adminLocationSuggestions.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 bg-white border-2 border-slate-300 rounded-lg mt-1 z-50 max-h-48 overflow-y-auto">
+                              {adminLocationSuggestions.map((suggestion) => (
+                                <button
+                                  key={suggestion.place_id}
+                                  onClick={() => selectAdminLocationSuggestion(suggestion)}
+                                  className="w-full text-left px-4 py-2 hover:bg-slate-100 border-b last:border-b-0 text-sm"
+                                >
+                                  {suggestion.description}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-2">Días de trabajo</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {days.map(day => (
+                              <label key={day} className="flex items-center gap-2 cursor-pointer">
+                                <input 
+                                  type="checkbox" 
+                                  checked={(adminEditForm.workDays || []).includes(day)}
+                                  onChange={() => toggleAdminDay(day)}
+                                  className="w-5 h-5 rounded border-slate-300"
+                                />
+                                <span className="text-sm text-slate-700">{day}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">Día</label>
-                            <select value={adminEditForm.scheduleDay || 'Lunes'} onChange={(e) => setAdminEditForm({ ...adminEditForm, scheduleDay: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-2 text-sm">
-                              {days.map(day => <option key={day} value={day}>{day}</option>)}
-                            </select>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Hora inicio</label>
+                            <input type="time" value={adminEditForm.startTime || '09:00'} onChange={(e) => setAdminEditForm({ ...adminEditForm, startTime: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-2 text-sm" />
                           </div>
                           <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">Desde</label>
-                            <input type="time" value={adminEditForm.scheduleStartTime || '09:00'} onChange={(e) => setAdminEditForm({ ...adminEditForm, scheduleStartTime: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-2 text-sm" />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">Hasta</label>
-                            <input type="time" value={adminEditForm.scheduleEndTime || '18:00'} onChange={(e) => setAdminEditForm({ ...adminEditForm, scheduleEndTime: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-2 text-sm" />
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Hora fin</label>
+                            <input type="time" value={adminEditForm.endTime || '18:00'} onChange={(e) => setAdminEditForm({ ...adminEditForm, endTime: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-2 text-sm" />
                           </div>
                         </div>
                         <input type="tel" value={adminEditForm.whatsapp} onChange={(e) => setAdminEditForm({ ...adminEditForm, whatsapp: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3" placeholder="WhatsApp" />
