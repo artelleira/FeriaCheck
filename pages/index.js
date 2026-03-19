@@ -35,7 +35,8 @@ export default function FeriaCheck() {
   const [adminPhotoPreview, setAdminPhotoPreview] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Cargar datos de Firebase
+  const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     
@@ -61,12 +62,10 @@ export default function FeriaCheck() {
     return () => unsubscribeVendors();
   }, []);
 
-  // Guardar vendors en Firebase
   const saveVendorsToFirebase = (updatedVendors) => {
     set(ref(database, 'vendors'), updatedVendors);
   };
 
-  // Guardar accounts en Firebase
   const saveAccountsToFirebase = (updatedAccounts) => {
     set(ref(database, 'accounts'), updatedAccounts);
   };
@@ -131,7 +130,9 @@ export default function FeriaCheck() {
       description: '',
       what_sell: '',
       location: '',
-      schedule: '',
+      scheduleDay: 'Lunes',
+      scheduleStartTime: '09:00',
+      scheduleEndTime: '18:00',
       isPresent: false,
       whatsapp: '',
       instagram: '',
@@ -301,6 +302,15 @@ export default function FeriaCheck() {
     window.open(`https://instagram.com/${handle}`, '_blank');
   };
 
+  const openGoogleMaps = (address) => {
+    const encoded = encodeURIComponent(address);
+    window.open(`https://www.google.com/maps/search/${encoded}`, '_blank');
+  };
+
+  const getScheduleDisplay = (vendor) => {
+    return `${vendor.scheduleDay} ${vendor.scheduleStartTime || '09:00'} - ${vendor.scheduleEndTime || '18:00'}`;
+  };
+
   const sortedVendors = [...vendors].sort((a, b) => {
     if (a.isPresent === b.isPresent) return 0;
     return a.isPresent ? -1 : 1;
@@ -342,12 +352,15 @@ export default function FeriaCheck() {
                       </div>
                       {vendor.what_sell && <p className="text-sm font-semibold text-slate-700 mb-2">📦 {vendor.what_sell}</p>}
                       {vendor.description && <p className="text-sm text-slate-600 mb-3 line-clamp-2">{vendor.description}</p>}
-                      {vendor.location && <p className="text-xs text-slate-600 mb-1">📍 {vendor.location}</p>}
-                      {vendor.schedule && <p className="text-xs text-slate-600 mb-3">⏰ {vendor.schedule}</p>}
+                      {vendor.location && <p className="text-xs text-slate-600 mb-1 cursor-pointer hover:text-blue-600 font-semibold">📍 {vendor.location}</p>}
+                      {vendor.scheduleDay && <p className="text-xs text-slate-600 mb-3">⏰ {getScheduleDisplay(vendor)}</p>}
                       <p className="text-xs text-slate-500 mb-4">{vendor.isPresent ? '✅ Presente hoy' : '❌ No disponible'}</p>
-                      <div className="flex gap-2">
-                        {vendor.whatsapp && <button onClick={() => openWhatsApp(vendor.whatsapp)} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-3 rounded-lg transition text-sm">💬 WhatsApp</button>}
-                        {vendor.instagram && <button onClick={() => openInstagram(vendor.instagram)} className="flex-1 bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-3 rounded-lg transition text-sm">📷 IG</button>}
+                      <div className="flex gap-2 flex-col">
+                        <div className="flex gap-2">
+                          {vendor.whatsapp && <button onClick={() => openWhatsApp(vendor.whatsapp)} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-3 rounded-lg transition text-sm">💬 WhatsApp</button>}
+                          {vendor.instagram && <button onClick={() => openInstagram(vendor.instagram)} className="flex-1 bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-3 rounded-lg transition text-sm">📷 IG</button>}
+                        </div>
+                        {vendor.location && <button onClick={() => openGoogleMaps(vendor.location)} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 rounded-lg transition text-sm">🗺️ Ver en Maps</button>}
                       </div>
                     </div>
                   </div>
@@ -433,12 +446,24 @@ export default function FeriaCheck() {
                     <textarea placeholder="Información adicional" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500 h-24" />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Ubicación</label>
-                    <input type="text" placeholder="Ej: Pasillo 2" value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500" />
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Ubicación (dirección)</label>
+                    <input type="text" placeholder="Ej: Pasillo 2, Local 5, Centro Comercial" value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500" />
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Horarios</label>
-                    <input type="text" placeholder="Ej: Lunes a viernes 15:00-18:00" value={editForm.schedule} onChange={(e) => setEditForm({ ...editForm, schedule: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500" />
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Día</label>
+                      <select value={editForm.scheduleDay || 'Lunes'} onChange={(e) => setEditForm({ ...editForm, scheduleDay: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500">
+                        {days.map(day => <option key={day} value={day}>{day}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Desde</label>
+                      <input type="time" value={editForm.scheduleStartTime || '09:00'} onChange={(e) => setEditForm({ ...editForm, scheduleStartTime: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Hasta</label>
+                      <input type="time" value={editForm.scheduleEndTime || '18:00'} onChange={(e) => setEditForm({ ...editForm, scheduleEndTime: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500" />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-2">WhatsApp</label>
@@ -465,7 +490,7 @@ export default function FeriaCheck() {
                     <h3 className="text-2xl font-bold text-slate-900">{currentVendor.name}</h3>
                     {currentVendor.what_sell && <p className="text-slate-600 mt-2">📦 {currentVendor.what_sell}</p>}
                     {currentVendor.location && <p className="text-slate-600">📍 {currentVendor.location}</p>}
-                    {currentVendor.schedule && <p className="text-slate-600">⏰ {currentVendor.schedule}</p>}
+                    {currentVendor.scheduleDay && <p className="text-slate-600">⏰ {getScheduleDisplay(currentVendor)}</p>}
                   </div>
                 </div>
                 {currentVendor.description && <p className="text-slate-600 mb-6 p-4 bg-slate-50 rounded-lg">{currentVendor.description}</p>}
@@ -551,8 +576,23 @@ export default function FeriaCheck() {
                         <input type="text" value={adminEditForm.name} onChange={(e) => setAdminEditForm({ ...adminEditForm, name: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3" placeholder="Nombre" />
                         <input type="text" value={adminEditForm.what_sell} onChange={(e) => setAdminEditForm({ ...adminEditForm, what_sell: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3" placeholder="¿Qué venden?" />
                         <textarea value={adminEditForm.description} onChange={(e) => setAdminEditForm({ ...adminEditForm, description: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3 h-20" placeholder="Descripción" />
-                        <input type="text" value={adminEditForm.location} onChange={(e) => setAdminEditForm({ ...adminEditForm, location: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3" placeholder="Ubicación" />
-                        <input type="text" value={adminEditForm.schedule} onChange={(e) => setAdminEditForm({ ...adminEditForm, schedule: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3" placeholder="Horarios" />
+                        <input type="text" value={adminEditForm.location} onChange={(e) => setAdminEditForm({ ...adminEditForm, location: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3" placeholder="Ubicación (dirección)" />
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Día</label>
+                            <select value={adminEditForm.scheduleDay || 'Lunes'} onChange={(e) => setAdminEditForm({ ...adminEditForm, scheduleDay: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-2 text-sm">
+                              {days.map(day => <option key={day} value={day}>{day}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Desde</label>
+                            <input type="time" value={adminEditForm.scheduleStartTime || '09:00'} onChange={(e) => setAdminEditForm({ ...adminEditForm, scheduleStartTime: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-2 text-sm" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">Hasta</label>
+                            <input type="time" value={adminEditForm.scheduleEndTime || '18:00'} onChange={(e) => setAdminEditForm({ ...adminEditForm, scheduleEndTime: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-2 text-sm" />
+                          </div>
+                        </div>
                         <input type="tel" value={adminEditForm.whatsapp} onChange={(e) => setAdminEditForm({ ...adminEditForm, whatsapp: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3" placeholder="WhatsApp" />
                         <input type="text" value={adminEditForm.instagram} onChange={(e) => setAdminEditForm({ ...adminEditForm, instagram: e.target.value })} className="w-full border-2 border-slate-300 rounded-lg p-3" placeholder="Instagram" />
                         <label className="flex items-center gap-3">
@@ -574,7 +614,7 @@ export default function FeriaCheck() {
                           <p className="text-sm text-slate-600">👤 @{vendor.username}</p>
                           <p className="text-sm text-slate-600">📦 {vendor.what_sell || 'Sin especificar'}</p>
                           <p className="text-sm text-slate-600">📍 {vendor.location || 'Sin ubicación'}</p>
-                          <p className="text-sm text-slate-600">⏰ {vendor.schedule || 'Sin horarios'}</p>
+                          <p className="text-sm text-slate-600">⏰ {getScheduleDisplay(vendor)}</p>
                           <p className={`text-sm font-bold mt-2 ${vendor.isPresent ? 'text-green-600' : 'text-red-600'}`}>{vendor.isPresent ? '✅ Presente' : '❌ Ausente'}</p>
                         </div>
                         <div className="flex gap-2 flex-col">
